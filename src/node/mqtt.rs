@@ -41,14 +41,8 @@ pub enum MqttNodeError {
     Serialise(String),
     #[error("Timeout on {topic}")]
     Timeout { topic: String },
-    #[error("Channel failed: {0}")]
-    Channel(String),
     #[error("Unknown error: {0}")]
     Unknown(String),
-}
-
-fn default_timeout() -> f32 {
-    30.0
 }
 
 #[derive(Serialize, Deserialize, Clone, JsonSchema, Default)]
@@ -152,6 +146,10 @@ struct MqttSubscribeAndWaitConfig {
     pub timeout_secs: f32,
     #[serde(default = "default_qos")]
     pub qos: u8,
+}
+
+fn default_timeout() -> f32 {
+    30.0
 }
 
 fn default_qos() -> u8 {
@@ -383,7 +381,6 @@ fn mqtt_device_req_node(
                              ..
                          }: Async<serde_json::Value>,
                          mqtt_handle: bevy_ecs::prelude::Res<MqttHandle>| {
-        // let ensure_mqtt = ensure_mqtt.clone();
         let config = config.clone();
         let mqtt = mqtt_handle.clone();
         async move {
@@ -415,7 +412,7 @@ fn mqtt_device_req_node(
                         continue;
                     }
                     Err(tokio::sync::broadcast::error::RecvError::Closed) => {
-                        return Err(MqttNodeError::Channel("Status channel closed".into()));
+                        return Err(MqttNodeError::Subscribe("Status channel closed".into()));
                     }
                 };
                 match serde_json::from_slice::<DeviceStatusUpdate>(&msg) {
@@ -462,7 +459,7 @@ fn mqtt_device_req_node(
                         continue;
                     }
                     Err(tokio::sync::broadcast::error::RecvError::Closed) => {
-                        return Err(MqttNodeError::Channel("Response channel closed".into()));
+                        return Err(MqttNodeError::Publish("Response channel closed".into()));
                     }
                 };
                 match serde_json::from_slice::<DeviceTaskResponse>(&msg) {
