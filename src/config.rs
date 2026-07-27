@@ -15,6 +15,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+use std::sync::OnceLock;
 
 #[derive(serde::Deserialize, Clone)]
 pub struct AmqpSettings {
@@ -98,10 +99,9 @@ impl Environment {
     }
 }
 
-pub fn load_base_configuration<T>() -> Result<T, config::ConfigError>
-where
-    T: serde::de::DeserializeOwned,
-{
+static BASE_CONFIG: OnceLock<config::Config> = OnceLock::new();
+
+fn load_base_configuration_once() -> Result<config::Config, config::ConfigError> {
     let mut builder = config::Config::builder()
         .add_source(config::File::new("config.toml", config::FileFormat::Toml));
     let env = Environment::from_env();
@@ -122,5 +122,13 @@ where
     dotenvy::from_filename(env_file).ok();
     builder = builder.add_source(config::Environment::default().separator("__"));
 
-    builder.build()?.try_deserialize::<T>()
+    builder.build()
+}
+
+pub fn load_base_configuration<T>() -> Result<T, config::ConfigError>
+where
+    T: serde::de::DeserializeOwned,
+{
+    let config = BASE_CONFIG.get_or_init(|| load_base_configuration_once().unwrap());
+    config.clone().try_deserialize::<T>()
 }
