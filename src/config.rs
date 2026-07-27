@@ -101,7 +101,13 @@ impl Environment {
 
 static BASE_CONFIG: OnceLock<config::Config> = OnceLock::new();
 
+#[cfg(test)]
+static CONFIG_CALLS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
 fn load_base_configuration_once() -> Result<config::Config, config::ConfigError> {
+    #[cfg(test)]
+    CONFIG_CALLS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+
     let mut builder = config::Config::builder()
         .add_source(config::File::new("config.toml", config::FileFormat::Toml));
     let env = Environment::from_env();
@@ -131,4 +137,47 @@ where
 {
     let config = BASE_CONFIG.get_or_init(|| load_base_configuration_once().unwrap());
     config.clone().try_deserialize::<T>()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::client::mqtt::MqttSettings;
+
+    #[allow(dead_code)]
+    #[derive(serde::Deserialize)]
+    struct InvalidSettings {
+        some_rubbish: String,
+    }
+
+    #[test]
+    fn test_invalid_load_base_configuration() {
+        let result = load_base_configuration::<InvalidSettings>();
+        assert!(result.is_err());
+        let result = load_base_configuration::<MqttSettings>();
+        assert!(result.is_ok());
+        let result = load_base_configuration::<Settings>();
+        assert!(result.is_ok());
+        assert_eq!(CONFIG_CALLS.load(std::sync::atomic::Ordering::Relaxed), 1);
+    }
+
+    #[test]
+    fn test_load_base_configuration_concurrently() {
+        let n = 6;
+        let barrier = std::sync::Arc::new(std::sync::Barrier::new(n));
+        std::thread::scope(|s| {
+            for i in 0..n {
+                let barrier = barrier.clone();
+                s.spawn(move || {
+                    println!("test_load_base_configuration_concurrently: t{i} waiting...");
+                    barrier.wait();
+                    println!("test_load_base_configuration_concurrently: t{i} started!");
+                    let _ = load_base_configuration::<Settings>();
+                    assert_eq!(CONFIG_CALLS.load(std::sync::atomic::Ordering::Relaxed), 1);
+                });
+            }
+        });
+        println!("test_load_base_configuration_concurrently: all threads done");
+        assert_eq!(CONFIG_CALLS.load(std::sync::atomic::Ordering::Relaxed), 1);
+    }
 }
