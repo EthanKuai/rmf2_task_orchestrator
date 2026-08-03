@@ -169,13 +169,15 @@ pub(crate) struct EnsureMqtt(Arc<Mutex<Option<MqttSettings>>>);
 
 impl EnsureMqtt {
     pub(crate) fn new(config: Option<MqttSettings>) -> Self {
-        Self(Arc::new(Mutex::new(config.or_else(Self::load_config))))
+        Self(Arc::new(Mutex::new(
+            config.or_else(|| Some(Self::load_config())),
+        )))
     }
 
-    fn load_config() -> Option<MqttSettings> {
+    fn load_config() -> MqttSettings {
         crate::config::load_base_configuration::<MqttTomlFormat>()
-            .ok()
-            .map(|c| c.mqtt_client)
+            .expect("Failed to load MQTT config")
+            .mqtt_client
     }
 }
 
