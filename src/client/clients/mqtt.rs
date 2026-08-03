@@ -43,6 +43,21 @@ impl Default for MqttSettings {
     }
 }
 
+impl MqttSettings {
+    /// fallback to default if invalid
+    fn sanitise(mut self) -> Self {
+        if self.client_id.is_empty() {
+            self.client_id = Self::default().client_id;
+            tracing::warn!("MqttSettings: client_id blank! Replacing with default...");
+        }
+        if self.host.is_empty() {
+            self.host = Self::default().host;
+            tracing::warn!("MqttSettings: host blank! Replacing with default...");
+        }
+        self
+    }
+}
+
 pub type MqttMessage = Vec<u8>;
 
 #[derive(Debug, thiserror::Error)]
@@ -114,7 +129,7 @@ impl MqttHandle {
             host,
             port,
             reconnect_millis,
-        } = config;
+        } = config.sanitise();
 
         let mut mqttoptions = MqttOptions::new(&client_id, &host, port);
         mqttoptions.set_keep_alive(Duration::from_secs(5));
