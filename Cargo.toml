@@ -11,6 +11,7 @@ crossflow = { git = "https://github.com/open-rmf/crossflow.git", branch = "main"
 crossflow_diagram_editor = { git = "https://github.com/open-rmf/crossflow.git", branch = "main", features = ["frontend", "router"] }
 dashmap = "6.1.0"
 dotenvy = "0.15.7"
+futures = "0.3.33"
 futures-lite = "2.6"
 futures-timer = "3.0"
 lapin = "3.7.2"
