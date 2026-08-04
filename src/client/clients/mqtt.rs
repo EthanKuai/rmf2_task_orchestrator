@@ -18,6 +18,7 @@
 
 use crossflow::bevy_ecs;
 use dashmap::DashMap;
+use futures::FutureExt;
 use rumqttc::{AsyncClient, Event, MqttOptions, Packet, QoS};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -93,7 +94,11 @@ impl MqttHandle {
     ) -> Result<broadcast::Receiver<MqttMessage>, MqttError> {
         // Clones the tx channel to pass to node if the topic currently has a rx channel opened
         if let Some(tx) = self.subscriptions.get(topic) {
-            return Ok(tx.subscribe());
+            if tx.closed().now_or_never().is_none() {
+                return Ok(tx.subscribe());
+            } else {
+                tracing::warn!("MQTT: subscribe: topic {topic} channel closed, replacing...");
+            }
         }
         let (tx, rx) = broadcast::channel(16);
         self.client
@@ -113,6 +118,8 @@ impl MqttHandle {
         qos: u8,
         retain: bool,
     ) -> Result<(), MqttError> {
+        // Temp race condition fix, to prevent publishing to a topic that is not yet subscribed to
+        self.subscribe(topic, qos).await.ok();
         self.client
             .publish(topic, Self::parse_qos(qos)?, retain, payload)
             .await
