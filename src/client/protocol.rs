@@ -15,3 +15,17 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
+#[derive(Debug, thiserror::Error)]
+pub enum ProtoError {
+    #[error("Configuration error: {0}")]
+    Config(String),
+    #[error("Connection error: {0}")]
+    Connect(String),
+    #[error("Publishing error: {0}")]
+    Publish(String),
+    #[error("Subscribing error: {0}")]
+    Subscribe(String),
+    #[error("Session not found: {0}")]
+    SessionNotFound(String),
+}
