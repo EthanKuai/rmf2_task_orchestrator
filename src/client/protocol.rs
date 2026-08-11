@@ -27,3 +27,20 @@ pub enum ProtoError {
     #[error("Subscribing error: {0}")]
     Subscribe(String),
 }
+
+fn get_type<T: ?Sized>() -> &'static str {
+    std::any::type_name::<T>()
+}
+
+// -----------------------------------------------------------------
+
+// Send: Arc<Mutex<_>>
+// DeserializeOwned + Default: load_base_configuration
+/// Handle loading of protocol configuration.
+pub trait ProtoSettings: serde::de::DeserializeOwned + Default + Send {
+    fn load_config() -> Self {
+        crate::config::load_base_configuration::<Self>()
+            .unwrap_or_else(|e| panic!("Failed to load {} config: {e}", get_type::<Self>()))
+    }
+    fn sanitise(self) -> Self;
+}
