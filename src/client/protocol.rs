@@ -40,9 +40,25 @@ fn get_type<T: ?Sized>() -> &'static str {
 // DeserializeOwned + Default: load_base_configuration
 /// A trait for protocol settings, providing methods for loading configuration.
 pub trait ProtocolSettings: serde::de::DeserializeOwned + Default + Send {
-    fn load_config() -> Self {
-        crate::config::load_base_configuration::<Self>()
-            .unwrap_or_else(|e| panic!("Failed to load {} config: {e}", get_type::<Self>()))
+    const TOML_NAME: &'static str;
+
+    fn load_config() -> Result<Self, ProtocolError> {
+        match crate::config::load_configuration_section::<Self>(Self::TOML_NAME) {
+            Ok(settings) => Ok(settings),
+            Err(::config::ConfigError::NotFound(_)) => {
+                tracing::warn!(
+                    "No [{}] table in configuration, using defaults for {}",
+                    Self::TOML_NAME,
+                    get_type::<Self>()
+                );
+                Ok(Self::default())
+            }
+            Err(e) => Err(ProtocolError::Config(format!(
+                "Failed to load [{}] into {}: {e}",
+                Self::TOML_NAME,
+                get_type::<Self>()
+            ))),
+        }
     }
     fn sanitise(self) -> Self;
 }
