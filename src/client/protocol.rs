@@ -16,6 +16,20 @@
  * limitations under the License.
  */
 
+#[derive(Debug, thiserror::Error)]
+pub enum ProtocolError {
+    #[error("Configuration error: {0}")]
+    Config(String),
+    #[error("Connection error: {0}")]
+    Connect(String),
+    #[error("Publishing error: {0}")]
+    Publish(String),
+    #[error("Subscribing error: {0}")]
+    Subscribe(String),
+    #[error("Session not found: {0}")]
+    SessionNotFound(String),
+}
+
 fn get_type<T: ?Sized>() -> &'static str {
     std::any::type_name::<T>()
 }
