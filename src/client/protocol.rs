@@ -39,6 +39,7 @@ fn get_type<T: ?Sized>() -> &'static str {
 // Send: Arc<Mutex<_>>
 // DeserializeOwned + Default: load_base_configuration
 /// A trait for protocol settings, providing methods for loading configuration.
+/// Implement with [`protocol::settings!`].
 pub trait ProtocolSettings: serde::de::DeserializeOwned + Default + Send {
     const TOML_NAME: &'static str;
 
@@ -61,4 +62,32 @@ pub trait ProtocolSettings: serde::de::DeserializeOwned + Default + Send {
         }
     }
     fn sanitise(self) -> Self;
+}
+
+#[macro_export]
+macro_rules! settings {
+    ($(#[$m:meta])* $v:vis struct $name:ident in $table:literal {
+        $($(#[$fm:meta])* $f:ident : $t:ty = $d:expr),* $(,)?
+    }) => {
+        $(#[$m])*
+        #[derive($crate::__serde::Deserialize, Clone, PartialEq, Debug)]
+        #[serde(crate = "rmf2_task_orchestrator::__serde", default, deny_unknown_fields)] // TODO: generalise to all crate renames
+        $v struct $name { $($(#[$fm])* pub $f: $t),* }
+
+        impl Default for $name {
+            fn default() -> Self {
+                Self { $($f: $d),* }
+            }
+        }
+
+        impl ProtocolSettings for $name {
+            const TOML_NAME: &'static str = $table;
+
+            fn sanitise(mut self) -> Self {
+                let d = Self::default();
+                $(if self.$f == <$t as Default>::default() { self.$f = d.$f; })*
+                self
+            }
+        }
+    };
 }
