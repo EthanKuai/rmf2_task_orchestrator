@@ -15,3 +15,20 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
+fn get_type<T: ?Sized>() -> &'static str {
+    std::any::type_name::<T>()
+}
+
+// -----------------------------------------------------------------
+
+// Send: Arc<Mutex<_>>
+// DeserializeOwned + Default: load_base_configuration
+/// A trait for protocol settings, providing methods for loading configuration.
+pub trait ProtocolSettings: serde::de::DeserializeOwned + Default + Send {
+    fn load_config() -> Self {
+        crate::config::load_base_configuration::<Self>()
+            .unwrap_or_else(|e| panic!("Failed to load {} config: {e}", get_type::<Self>()))
+    }
+    fn sanitise(self) -> Self;
+}
