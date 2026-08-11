@@ -131,12 +131,24 @@ fn load_base_configuration_once() -> Result<config::Config, config::ConfigError>
     builder.build()
 }
 
+fn base_configuration() -> &'static config::Config {
+    BASE_CONFIG.get_or_init(|| load_base_configuration_once().unwrap())
+}
+
 pub fn load_base_configuration<T>() -> Result<T, config::ConfigError>
 where
     T: serde::de::DeserializeOwned,
 {
-    let config = BASE_CONFIG.get_or_init(|| load_base_configuration_once().unwrap());
-    config.clone().try_deserialize::<T>()
+    base_configuration().clone().try_deserialize::<T>()
+}
+
+// `deny_unknown_fields` can be enforced within
+/// deserialise only within: `task_orchestrator.amqp`
+pub fn load_configuration_section<T>(key: &str) -> Result<T, config::ConfigError>
+where
+    T: serde::de::DeserializeOwned,
+{
+    base_configuration().get::<T>(key)
 }
 
 #[cfg(test)]
