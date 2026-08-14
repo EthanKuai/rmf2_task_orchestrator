@@ -123,7 +123,7 @@ impl MqttHandle {
 
 impl MqttHandle {
     // TODO(@EthanKuai): Max retries timeout + change implementations to expect result.
-    pub fn connect(config: MqttSettings) -> Self {
+    pub fn connect(config: MqttSettings, runtime: tokio::runtime::Handle) -> Self {
         let MqttSettings {
             client_id,
             host,
@@ -143,7 +143,7 @@ impl MqttHandle {
         let subscriptions: Arc<DashMap<String, broadcast::Sender<MqttMessage>>> =
             Arc::new(DashMap::new());
         let subs = subscriptions.clone();
-        tokio::spawn(async move {
+        runtime.spawn(async move {
             loop {
                 match eventloop.poll().await {
                     Ok(Event::Incoming(Packet::Publish(publish))) => {
@@ -200,7 +200,8 @@ impl EnsureMqtt {
 impl bevy_ecs::system::Command for EnsureMqtt {
     fn apply(self, world: &mut bevy_ecs::prelude::World) {
         if let Some(mqtt_config) = self.0.lock().unwrap().take() {
-            let mqtt = MqttHandle::connect(mqtt_config);
+            let runtime = world.resource::<crate::TokioHandle>().0.clone();
+            let mqtt = MqttHandle::connect(mqtt_config, runtime);
             world.insert_resource(mqtt);
         }
     }

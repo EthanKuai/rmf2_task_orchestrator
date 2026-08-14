@@ -26,7 +26,7 @@ use amqp_handlers::handle_workflow_execute;
 
 use axum::Router;
 use crossflow::bevy_time::TimePlugin;
-use crossflow::{CrossflowExecutorApp, DiagramElementRegistry, bevy_app};
+use crossflow::{CrossflowExecutorApp, DiagramElementRegistry, bevy_app, bevy_ecs};
 use crossflow_diagram_editor::{ServerOptions, new_router};
 use std::sync::Arc;
 use std::thread;
@@ -37,6 +37,9 @@ pub struct ExecutorHandle {
     pub executor_url: String,
 }
 
+#[derive(bevy_ecs::prelude::Resource)]
+pub(crate) struct TokioHandle(pub(crate) tokio::runtime::Handle);
+
 // Spawn the Bevy executor in a separate thread
 pub async fn spawn(
     amqp_config: &AmqpSettings,
@@ -45,13 +48,12 @@ pub async fn spawn(
 ) -> Result<(ExecutorHandle, Router), String> {
     let amqp_client = create_amqp_client(amqp_config).await?;
     let (router_tx, router_rx) = oneshot::channel();
-    let tokio_handle = tokio::runtime::Handle::current();
+    let tokio_handle = TokioHandle(tokio::runtime::Handle::current());
 
     thread::spawn(move || {
-        let _tokio_guard = tokio_handle.enter();
-
         let mut app = bevy_app::App::new();
         app.add_plugins((CrossflowExecutorApp::default(), TimePlugin));
+        app.insert_resource(tokio_handle);
 
         let mut registry = DiagramElementRegistry::new();
         node::amqp::register(&mut registry, amqp_client);
