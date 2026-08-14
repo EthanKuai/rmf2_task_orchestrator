@@ -495,6 +495,7 @@ fn mqtt_device_req_node(
 mod tests {
     use super::*;
     use crate::client::mqtt::MqttSettings;
+    use crate::executor::TokioHandle;
     use crossflow::bevy_app::App;
     use crossflow::{Diagram, DiagramElementRegistry, testing::*};
     use serde_json::json;
@@ -513,6 +514,9 @@ mod tests {
     #[tokio::test]
     async fn test_mqtt_diagram_builds() {
         let mut ctx = TestingContext::minimal_plugins();
+        let tokio_handle = TokioHandle(tokio::runtime::Handle::current());
+        ctx.app.insert_resource(tokio_handle);
+
         let mut registry = DiagramElementRegistry::new();
         register_nodes(&mut ctx.app, &mut registry);
 
@@ -618,6 +622,9 @@ mod tests {
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn test_mqtt_listen() {
         let mut ctx = TestingContext::minimal_plugins();
+        let tokio_handle = TokioHandle(tokio::runtime::Handle::current());
+        ctx.app.insert_resource(tokio_handle);
+
         let mut registry = DiagramElementRegistry::new();
         register_nodes(&mut ctx.app, &mut registry);
 
@@ -714,6 +721,9 @@ mod tests {
     #[tokio::test]
     async fn test_mqtt_pub_sub() {
         let mut ctx = TestingContext::minimal_plugins();
+        let tokio_handle = TokioHandle(tokio::runtime::Handle::current());
+        ctx.app.insert_resource(tokio_handle);
+
         let mut registry = DiagramElementRegistry::new();
         register_nodes(&mut ctx.app, &mut registry);
 
