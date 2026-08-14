@@ -174,7 +174,8 @@ impl MqttHandle {
     }
 }
 
-#[derive(serde::Deserialize, Clone)]
+#[derive(serde::Deserialize, Clone, Default)]
+#[serde(default)]
 pub struct MqttTomlFormat {
     pub mqtt_client: MqttSettings,
 }
