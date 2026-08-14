@@ -142,7 +142,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::client::mqtt::MqttSettings;
+    use crate::client::mqtt::{MqttSettings, MqttTomlFormat};
 
     #[allow(dead_code)]
     #[derive(serde::Deserialize)]
@@ -155,9 +155,11 @@ mod tests {
         let result = load_base_configuration::<InvalidSettings>();
         assert!(result.is_err());
         let result = load_base_configuration::<MqttSettings>();
-        assert!(result.is_ok());
+        assert!(result.is_err()); // deny_unknown_fields
+        let result = load_base_configuration::<MqttTomlFormat>();
+        assert!(result.is_ok()); // used
         let result = load_base_configuration::<Settings>();
-        assert!(result.is_ok());
+        assert!(result.is_ok()); // used
         assert_eq!(CONFIG_CALLS.load(std::sync::atomic::Ordering::Relaxed), 1);
     }
 

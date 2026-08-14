@@ -24,7 +24,7 @@ use std::time::Duration;
 use tokio::sync::broadcast;
 
 #[derive(serde::Deserialize, Clone)]
-#[serde(default)]
+#[serde(default, deny_unknown_fields)]
 pub struct MqttSettings {
     pub client_id: String,
     pub host: String,
