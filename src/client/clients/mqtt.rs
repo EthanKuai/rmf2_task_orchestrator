@@ -131,14 +131,14 @@ impl MqttHandle {
             reconnect_millis,
         } = config.sanitise();
 
-        let mut mqttoptions = MqttOptions::new(&client_id, &host, port);
-        mqttoptions.set_keep_alive(Duration::from_secs(5));
         tracing::info!(
             "MQTT connecting to {}:{} (client_id={})",
-            &host,
+            host,
             port,
-            &client_id
+            client_id
         );
+        let mut mqttoptions = MqttOptions::new(client_id, host, port);
+        mqttoptions.set_keep_alive(Duration::from_secs(5));
         let (client, mut eventloop) = AsyncClient::new(mqttoptions, 64);
         let subscriptions: Arc<DashMap<String, broadcast::Sender<MqttMessage>>> =
             Arc::new(DashMap::new());
