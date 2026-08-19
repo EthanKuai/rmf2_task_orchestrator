@@ -62,3 +62,42 @@ pub trait ProtoSettings: serde::de::DeserializeOwned + Default + Send {
     }
     fn sanitise(self) -> Self;
 }
+
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __proto_settings {
+    ($(#[$m:meta])* $v:vis struct $name:ident in $table:literal {
+        $($(#[$fm:meta])* $f:ident : $t:ty = $d:expr),* $(,)?
+    }) => {
+        $crate::__paste::paste! {
+            #[doc(hidden)]
+            #[allow(non_camel_case_types, unused_imports)]
+            use $crate::__serde as [<__rmf2_to_serde_ $name>];
+
+            $(#[$m])*
+            #[derive($crate::__serde::Deserialize, Clone, PartialEq, Debug)]
+            #[serde(crate = "__rmf2_to_serde_" $name, default, deny_unknown_fields)]
+            $v struct $name {
+                $($(#[$fm])* pub $f: $t),*
+            }
+        }
+
+        impl ::core::default::Default for $name {
+            fn default() -> Self {
+                Self { $($f: $d),* }
+            }
+        }
+
+        impl $crate::client::protocol::ProtoSettings for $name {
+            const TOML_NAME: &'static str = $table;
+
+            fn sanitise(mut self) -> Self {
+                let d = Self::default();
+                $(if self.$f == <$t as ::core::default::Default>::default() { self.$f = d.$f; })*
+                self
+            }
+        }
+    };
+}
+
+pub use __proto_settings as settings;
