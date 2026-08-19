@@ -26,4 +26,5 @@ pub use executor::{ExecutorHandle, create_amqp_client, create_amqp_router, spawn
 
 // For protocol.rs macros internal use
 #[doc(hidden)]
+pub use paste as __paste;
 pub use serde as __serde;
