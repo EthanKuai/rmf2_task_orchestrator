@@ -8,6 +8,8 @@ runs:
       with:
         components: rustfmt, clippy
 
+    - uses: Swatinem/rust-cache@v2
+
     # Crossflow frontend runs install
     - uses: pnpm/setup@v2
       with:
