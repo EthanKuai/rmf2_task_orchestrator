@@ -45,7 +45,16 @@ pub trait ProtocolSettings: serde::de::DeserializeOwned + Default + Send {
 
     fn load_config() -> Result<Self, ProtocolError> {
         match crate::config::load_configuration_section::<Self>(Self::TOML_NAME) {
-            Ok(settings) => Ok(settings),
+            Ok(settings) => {
+                if !settings.is_valid() {
+                    return Err(ProtocolError::Config(format!(
+                        "Invalid [{}] configuration: {}",
+                        Self::TOML_NAME,
+                        get_type::<Self>()
+                    )));
+                }
+                Ok(settings)
+            }
             Err(::config::ConfigError::NotFound(_)) => {
                 tracing::warn!(
                     "No [{}] table in configuration, using defaults for {}",
@@ -61,15 +70,19 @@ pub trait ProtocolSettings: serde::de::DeserializeOwned + Default + Send {
             ))),
         }
     }
-    fn sanitise(self) -> Self;
+    fn is_valid(&self) -> bool;
 }
 
 #[doc(hidden)]
 #[macro_export]
 macro_rules! __protocol_settings {
-    ($(#[$m:meta])* $v:vis struct $name:ident in $table:literal {
-        $($(#[$fm:meta])* $f:ident : $t:ty = $d:expr),* $(,)?
-    }) => {
+    (
+        $(#[$m:meta])*
+        $v:vis struct $name:ident in $table:literal {
+            $($(#[$fm:meta])* $f:ident : $t:ty = $d:expr),* $(,)?
+        }
+        is_valid | $s:ident | $body:block
+    ) => {
         $crate::__paste::paste! {
             #[doc(hidden)]
             #[allow(non_camel_case_types, unused_imports)]
@@ -92,13 +105,31 @@ macro_rules! __protocol_settings {
         impl $crate::client::protocol::ProtocolSettings for $name {
             const TOML_NAME: &'static str = $table;
 
-            fn sanitise(mut self) -> Self {
-                let d = Self::default();
-                $(if self.$f == <$t as ::core::default::Default>::default() { self.$f = d.$f; })*
-                self
+            fn is_valid(&self) -> bool {
+                let $s = self;
+                $body
             }
         }
     };
 }
 
+/// # Example
+///
+/// ```
+/// # #[macro_use] extern crate rmf2_task_orchestrator;
+/// # use rmf2_task_orchestrator::client::protocol;
+/// protocol::settings! {
+///     pub struct MQTTSettings in "mqtt_client" {
+///         host: String = "localhost".into(),
+///         port: u16 = 1883,
+///         client_id: String = "p1".into(),
+///     }
+///     is_valid |s| {
+///         if s.client_id.is_empty() || s.host.is_empty() {
+///             return false;
+///         }
+///         true
+///     }
+/// }
+/// ```
 pub use __protocol_settings as settings;
