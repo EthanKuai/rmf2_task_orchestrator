@@ -8,10 +8,9 @@ runs:
       with:
         components: rustfmt, clippy
 
-    - uses: pnpm/action-setup@v4
+    # Crossflow frontend runs install
+    - uses: pnpm/setup@v2
       with:
         version: 11
-
-    - uses: actions/setup-node@v4
-      with:
-        node-version: 22
+        runtime: node@22
+        install: false
