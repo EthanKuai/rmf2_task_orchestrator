@@ -5,6 +5,9 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
+  schedule:
+    # crossflow pinned to main (rolling)
+    - cron: "30 2 * * 1"
 
 jobs:
   style:
@@ -36,7 +39,7 @@ jobs:
         run: |
           sudo apt-get update -qq -y
           sudo apt-get install libpaho-mqtt-dev libpaho-mqttpp-dev mosquitto -qq -y
-      
+
       - name: Start MQTT broker
         run: |
           mosquitto -d
