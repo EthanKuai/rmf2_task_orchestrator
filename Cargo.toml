@@ -23,3 +23,6 @@ thiserror = "2.0"
 tokio = { version = "1.48.0", features = ["full"] }
 tracing = "0.1.43"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+[dev-dependencies]
+cargo-husky = { version = "1", default-features = false, features = ["precommit-hook", "prepush-hook", "run-cargo-clippy", "run-cargo-fmt"] }
