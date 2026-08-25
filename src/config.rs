@@ -45,12 +45,6 @@ impl From<&AmqpSettings> for String {
 }
 
 #[derive(serde::Deserialize, Clone)]
-pub struct TaskOrchestratorSettings {
-    pub http: HttpSettings,
-    pub amqp: AmqpSettings,
-}
-
-#[derive(serde::Deserialize, Clone)]
 pub struct HttpSettings {
     pub port: u16,
     pub host: String,
@@ -70,7 +64,8 @@ impl HttpSettings {
 
 #[derive(serde::Deserialize, Clone)]
 pub struct Settings {
-    pub task_orchestrator: TaskOrchestratorSettings,
+    pub http: HttpSettings,
+    pub amqp: AmqpSettings,
 }
 
 pub enum Environment {
