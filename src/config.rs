@@ -126,7 +126,12 @@ fn load_base_configuration_once() -> Result<config::Config, config::ConfigError>
         }
     }
     dotenvy::from_filename(env_file).ok();
-    builder = builder.add_source(config::Environment::default().separator("__"));
+    builder = builder.add_source(
+        config::Environment::default()
+            .separator("__")
+            .prefix("RMF2_TO")
+            .prefix_separator("__"),
+    );
 
     builder.build()
 }
