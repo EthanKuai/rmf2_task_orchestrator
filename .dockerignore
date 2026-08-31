@@ -1,1 +1,7 @@
 target
+.git
+.github
+CHANGELOG.rst
+.dockerignore
+Dockerfile
+docker-compose.yml
