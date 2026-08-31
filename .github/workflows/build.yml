@@ -42,7 +42,7 @@ jobs:
       - name: Install mosquitto
         run: |
           sudo apt-get update -qq -y
-          sudo apt-get install libpaho-mqtt-dev libpaho-mqttpp-dev mosquitto -qq -y
+          sudo apt-get install mosquitto --no-install-recommends -qq -y
 
       - name: Start MQTT broker
         run: |
