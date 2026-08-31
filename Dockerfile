@@ -5,10 +5,10 @@ FROM ${BUILD_IMAGE} AS builder
 WORKDIR /app
 ENV DEBIAN_FRONTEND=noninteractive
 ENV PNPM_VERSION=11 NODE_VERSION=22
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     curl clang pkg-config libssl-dev ca-certificates gnupg \
     && curl -fsSL https://deb.nodesource.com/setup_${NODE_VERSION}.x | bash - \
-    && apt-get install -y nodejs \
+    && apt-get install -y nodejs --no-install-recommends \
     && corepack enable \
     && corepack prepare pnpm@${PNPM_VERSION} --activate \
     && rm -rf /var/lib/apt/lists/*
