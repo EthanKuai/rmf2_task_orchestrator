@@ -31,6 +31,11 @@ jobs:
         image: rabbitmq:3
         ports:
           - 5672:5672
+        options: >-
+          --health-cmd "rabbitmq-diagnostics -q ping"
+          --health-interval 4s
+          --health-timeout 2s
+          --health-retries 5
     steps:
       - uses: actions/checkout@v7
 
@@ -44,7 +49,7 @@ jobs:
       - name: Start MQTT broker
         run: |
           mosquitto -d
-          sleep 2
+          timeout 5 bash -c 'until echo > /dev/tcp/127.0.0.1/1883; do sleep 0.5; done'
 
       - run: cargo build
       - run: cargo test
