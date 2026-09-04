@@ -4,7 +4,9 @@ ARG RUNTIME_IMAGE=ubuntu:noble
 FROM ${BUILD_IMAGE} AS chef
 WORKDIR /app
 ENV DEBIAN_FRONTEND=noninteractive
-RUN cargo install cargo-chef
+RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \
+    --mount=type=cache,target=/usr/local/cargo/git,sharing=locked \
+    cargo install cargo-chef
 
 FROM chef AS planner
 COPY . .
@@ -22,12 +24,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Build dependencies to cache in `cache-from/to: type=gha`
 COPY --from=planner /app/recipe.json recipe.json
-RUN cargo chef cook --release --recipe-path recipe.json
+RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \
+    --mount=type=cache,target=/usr/local/cargo/git,sharing=locked \
+    cargo chef cook --release --recipe-path recipe.json
 # Only built dependencies cached
 
 COPY . .
 # Not cached; cargo builds package
-RUN cargo build --release
+RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \
+    --mount=type=cache,target=/usr/local/cargo/git,sharing=locked \
+    cargo build --release
 
 FROM ${RUNTIME_IMAGE} AS runtime
 WORKDIR /app
