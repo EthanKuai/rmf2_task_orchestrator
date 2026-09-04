@@ -11,7 +11,7 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 RUN npm install -g pnpm@11
 COPY . .
-RUN cargo build --release
+RUN cargo build --locked --release
 
 FROM ${RUNTIME_IMAGE} AS runtime
 WORKDIR /app

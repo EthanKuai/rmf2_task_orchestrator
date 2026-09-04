@@ -36,11 +36,11 @@ jobs:
         run: |
           sudo apt-get update -qq -y
           sudo apt-get install libpaho-mqtt-dev libpaho-mqttpp-dev mosquitto -qq -y
-      
+
       - name: Start MQTT broker
         run: |
           mosquitto -d
           sleep 2
 
-      - run: cargo build
-      - run: cargo test
+      - run: cargo build --locked --release
+      - run: cargo test --locked
