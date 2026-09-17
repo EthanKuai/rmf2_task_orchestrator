@@ -82,8 +82,8 @@ pub trait ProtoSettings: serde::de::DeserializeOwned + Default + Send {
 ///
 /// ```
 /// # #[macro_use] extern crate rmf2_task_orchestrator;
-/// # use rmf2_task_orchestrator::client::protocol;
-/// protocol::settings! {
+/// # use rmf2_task_orchestrator::client::protocol::*;
+/// settings! {
 ///     pub struct MQTTSettings in "mqtt_client" {
 ///         host: String = "localhost".into(),
 ///         port: u16 = 1883,
@@ -184,37 +184,120 @@ pub trait ProtoHandle: bevy_ecs::prelude::Resource + Clone {
 ///
 /// ```
 /// # #[macro_use] extern crate rmf2_task_orchestrator;
-/// # use rmf2_task_orchestrator::client::protocol;
-/// protocol::handle! {
+/// # use rmf2_task_orchestrator::client::protocol::*;
+/// # use dashmap::DashMap;
+/// # use rumqttc::{AsyncClient,MqttOptions};
+/// # use std::sync::Arc;
+/// # use tokio::runtime::Handle;
+/// # use tokio::sync::broadcast;
+/// pub type MqttOut = Vec<u8>;
+///
+/// pub struct MqttIn {
+///     payload: MqttOut,
+///     retain: bool,
+/// }
+/// impl MqttIn {
+///     fn new(payload: impl Into<MqttOut>, retain: bool) -> Self {
+///         Self { payload: payload.into(), retain }
+///     }
+/// }
+///
+/// # settings! {
+/// #     pub struct MQTTSettings in "mqtt_client" {
+/// #         host: String = "localhost".into(),
+/// #         port: u16 = 1883,
+/// #         client_id: String = "p1".into(),
+/// #     }
+/// #     is_valid |s| {
+/// #         if s.client_id.is_empty() || s.host.is_empty() {
+/// #             return false;
+/// #         }
+/// #         true
+/// #     }
+/// # }
+/// # pub struct MQTTStream(broadcast::Receiver<MqttOut>);
+/// # impl ProtoStream for MQTTStream {
+/// #     type Out = MqttOut;
+/// #     fn recv(&mut self) -> PinBoxFuture<'_, Option<Self::Out>> {
+/// #         Box::pin(async move {
+/// #             self.0.recv().await.ok()
+/// #         })
+/// #     }
+/// # }
+/// handle! {
 ///     pub struct MQTTHandle {
 ///         client: Arc<AsyncClient>,
-///         subscriptions: Arc<DashMap<String, broadcast::Sender<MqttMessage>>>,
+///         subscriptions: Arc<DashMap<String, broadcast::Sender<MqttOut>>>,
 ///     }
 /// }
-/// impl MQTTHandle {
-///     fn parse_qos(qos: u8) -> Result<rumqttc::QoS, protocol::ProtoError> {
-///         Ok(match qos {
-///             0 => rumqttc::QoS::AtMostOnce,
-///             _ => return Err(protocol::ProtoError::Config(qos)),
-///         })
-///     }
-/// }
-/// impl protocol::ProtoHandle for MQTTHandle {
+/// # impl MQTTHandle {
+/// #     fn parse_qos(qos: u8) -> Result<rumqttc::QoS, ProtoError> {
+/// #         match qos {
+/// #             0 => Ok(rumqttc::QoS::AtMostOnce),
+/// #             _ => Err(ProtoError::Config(format!("{qos} not a valid QoS"))),
+/// #         }
+/// #     }
+/// # }
+/// impl ProtoHandle for MQTTHandle {
 ///     type Settings = MQTTSettings;
-///     type NodeConfig = Vec<u8>;
-///     type Input = Vec<u8>;
-///     type Output = Vec<u8>;
+///     type NodeConfig = u8;
+///     type In = MqttIn;
+///     type Out = MqttOut;
 ///
-///     fn connect(config: Self::Settings) -> Self {
-///         ...
+///     fn connect(settings: MQTTSettings, runtime: Handle) -> Self {
+///         // ...
+///         # let MQTTSettings {
+///         #     client_id,
+///         #     host,
+///         #     port,
+///         # } = settings;
+///         # let mut mqttoptions = MqttOptions::new(client_id, host, port);
+///         # let (client, mut _eventloop) = AsyncClient::new(mqttoptions, 64);
+///         # let subscriptions: Arc<DashMap<String, broadcast::Sender<MqttOut>>> = Arc::new(DashMap::new());
+///         # Self {
+///         #     client: Arc::new(client),
+///         #     subscriptions,
+///         # }
 ///     }
 ///
-///     fn subscribe(&self, topic: &str, qos: u8) -> ProtoFuture<'_, ()> {
-///         ...
+///     fn publish(
+///         &self,
+///         topic: &str,
+///         payload: MqttIn,
+///         qos: Self::NodeConfig,
+///     ) -> ProtoFuture<'_, ()> {
+///         // ...
+///         # let topic = topic.to_string();
+///         # Box::pin(async move {
+///         #     self.client
+///         #         .publish(&topic, Self::parse_qos(qos)?, payload.retain, payload.payload)
+///         #         .await
+///         #         .map_err(|e| ProtoError::Publish(format!("Failed to publish to {topic} topic: {e}")))?;
+///         #     Ok(())
+///         # })
 ///     }
 ///
-///     fn publish(&self, topic: &str, qos: u8, payload: Self::Input) -> ProtoFuture<'_, Box<dyn ProtoStream<IoType = Self::Output>>> {
-///         ...
+///     fn subscribe(
+///         &self,
+///         topic: &str,
+///         qos: Self::NodeConfig,
+///     ) -> ProtoFuture<'_, Box<dyn ProtoStream<Out = MqttOut>>> {
+///         // ...
+///         # let topic = topic.to_string();
+///         # Box::pin(async move {
+///         #     if let Some(tx) = self.subscriptions.get(&topic) {
+///         #         return Ok(Box::new(MQTTStream(tx.subscribe())) as Box<dyn ProtoStream<Out = MqttOut>>);
+///         #     }
+///         #     let (tx, rx) = broadcast::channel(16);
+///         #     self.client
+///         #         .subscribe(&topic, Self::parse_qos(qos)?)
+///         #         .await
+///         #         .map_err(|e| {
+///         #             ProtoError::Subscribe(format!("Failed to subscribe to {topic} topic: {e}"))
+///         #         })?;
+///         #     self.subscriptions.insert(topic, tx);
+///         #     Ok(Box::new(MQTTStream(rx)) as Box<dyn ProtoStream<Out = MqttOut>>)
+///         # })
 ///     }
 /// }
 /// ```
@@ -241,6 +324,24 @@ pub use __proto_handle as handle;
 // -----------------------------------------------------------------
 
 /// [`type Out`][ProtoStream::Out]: recommend [`Vec<u8>`] or [`serde_json::Value`]. Any other should be a custom type.
+///
+/// # Example
+/// ```
+/// # #[macro_use] extern crate rmf2_task_orchestrator;
+/// # use rmf2_task_orchestrator::client::protocol::*;
+/// # use tokio::sync::broadcast;
+/// pub type MqttOut = Vec<u8>;
+///
+/// pub struct MQTTStream(broadcast::Receiver<MqttOut>);
+/// impl ProtoStream for MQTTStream {
+///     type Out = MqttOut;
+///     fn recv(&mut self) -> PinBoxFuture<'_, Option<Self::Out>> {
+///         Box::pin(async move {
+///             self.0.recv().await.ok()
+///         })
+///     }
+/// }
+/// ```
 pub trait ProtoStream: Send + 'static {
     type Out;
     fn recv(&mut self) -> PinBoxFuture<'_, Option<Self::Out>>;
