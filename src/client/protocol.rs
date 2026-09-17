@@ -16,6 +16,9 @@
  * limitations under the License.
  */
 
+use std::future::Future;
+use std::pin::Pin;
+
 #[derive(Debug, thiserror::Error)]
 pub enum ProtoError {
     #[error("Configuration error: {0}")]
@@ -133,3 +136,15 @@ macro_rules! __proto_settings {
 
 #[doc(inline)]
 pub use __proto_settings as settings;
+
+// -----------------------------------------------------------------
+
+pub type ProtoFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
+
+// -----------------------------------------------------------------
+
+/// [`type Output`][ProtoStream::Output]: recommend [`Vec<u8>`] or [`serde_json::Value`]. Any other should be a custom type.
+pub trait ProtoStream: Send + 'static {
+    type Output;
+    fn recv(&mut self) -> ProtoFuture<'_, Option<Self::Output>>;
+}
