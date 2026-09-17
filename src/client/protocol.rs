@@ -142,19 +142,23 @@ pub use __proto_settings as settings;
 
 // -----------------------------------------------------------------
 
-/// [`publish`][ProtoHandle::publish], [`subscribe`][ProtoHandle::subscribe], [`recv`][ProtoStream::recv] output.
-pub type ProtoFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
+/// [`recv`][ProtoStream::recv] output.
+pub type PinBoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
+
+/// [`PinBoxFuture`] wrapper. [`publish`][ProtoHandle::publish] & [`subscribe`][ProtoHandle::subscribe] output.
+pub type ProtoFuture<'a, T> = PinBoxFuture<'a, Result<T, ProtoError>>;
+
+// -----------------------------------------------------------------
 
 // bevy_ecs::prelude::Resource: Send + Sync + 'static
 // Clone: for Res<bevy_ecs::prelude::Resource>::clone
 /// Handles protocol connection, providing pub/sub/connect.
 /// Surround original struct with [`handle!`] prior to `impl`.
-#[allow(clippy::type_complexity)]
 pub trait ProtoHandle: bevy_ecs::prelude::Resource + Clone {
     type Settings: ProtoSettings;
     type NodeConfig;
-    type Input;
-    type Output;
+    type In;
+    type Out;
 
     fn connect(settings: Self::Settings, runtime: tokio::runtime::Handle) -> Self
     where
@@ -163,15 +167,15 @@ pub trait ProtoHandle: bevy_ecs::prelude::Resource + Clone {
     fn publish(
         &self,
         address: &str,
-        payload: Self::Input,     // &[u8]
+        payload: Self::In,        // &[u8]
         config: Self::NodeConfig, // &serde_json::Value
-    ) -> ProtoFuture<'_, Result<(), ProtoError>>;
+    ) -> ProtoFuture<'_, ()>;
 
     fn subscribe(
         &self,
         address: &str,
         config: Self::NodeConfig, // &serde_json::Value
-    ) -> ProtoFuture<'_, Result<Box<dyn ProtoStream<Output = Self::Output>>, ProtoError>>;
+    ) -> ProtoFuture<'_, Box<dyn ProtoStream<Out = Self::Out>>>;
 }
 
 /// Prerequisites for [`ProtoHandle`].
@@ -236,8 +240,8 @@ pub use __proto_handle as handle;
 
 // -----------------------------------------------------------------
 
-/// [`type Output`][ProtoStream::Output]: recommend [`Vec<u8>`] or [`serde_json::Value`]. Any other should be a custom type.
+/// [`type Out`][ProtoStream::Out]: recommend [`Vec<u8>`] or [`serde_json::Value`]. Any other should be a custom type.
 pub trait ProtoStream: Send + 'static {
-    type Output;
-    fn recv(&mut self) -> ProtoFuture<'_, Option<Self::Output>>;
+    type Out;
+    fn recv(&mut self) -> PinBoxFuture<'_, Option<Self::Out>>;
 }
