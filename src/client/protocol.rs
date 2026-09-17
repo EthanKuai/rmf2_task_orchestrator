@@ -190,6 +190,7 @@ pub trait ProtoHandle: bevy_ecs::prelude::Resource + Clone {
 /// # use std::sync::Arc;
 /// # use tokio::runtime::Handle;
 /// # use tokio::sync::broadcast;
+/// # use tokio::sync::broadcast::error::RecvError;
 /// pub type MqttOut = Vec<u8>;
 ///
 /// pub struct MqttIn {
@@ -220,7 +221,13 @@ pub trait ProtoHandle: bevy_ecs::prelude::Resource + Clone {
 /// #     type Out = MqttOut;
 /// #     fn recv(&mut self) -> PinBoxFuture<'_, Option<Self::Out>> {
 /// #         Box::pin(async move {
-/// #             self.0.recv().await.ok()
+/// #             loop {
+/// #                 match self.0.recv().await {
+/// #                     Ok(v) => return Some(v),
+/// #                     Err(RecvError::Lagged(n)) => tracing::warn!("MqttListen: lagged {n}"),
+/// #                     Err(RecvError::Closed) => return None,
+/// #                 }
+/// #             }
 /// #         })
 /// #     }
 /// # }
@@ -330,6 +337,7 @@ pub use __proto_handle as handle;
 /// # #[macro_use] extern crate rmf2_task_orchestrator;
 /// # use rmf2_task_orchestrator::client::protocol::*;
 /// # use tokio::sync::broadcast;
+/// # use tokio::sync::broadcast::error::RecvError;
 /// pub type MqttOut = Vec<u8>;
 ///
 /// pub struct MQTTStream(broadcast::Receiver<MqttOut>);
@@ -337,7 +345,13 @@ pub use __proto_handle as handle;
 ///     type Out = MqttOut;
 ///     fn recv(&mut self) -> PinBoxFuture<'_, Option<Self::Out>> {
 ///         Box::pin(async move {
-///             self.0.recv().await.ok()
+///             loop {
+///                 match self.0.recv().await {
+///                     Ok(v) => return Some(v),
+///                     Err(RecvError::Lagged(n)) => tracing::warn!("Mqtt: lagged {n}"),
+///                     Err(RecvError::Closed) => return None,
+///                 }
+///             }
 ///         })
 ///     }
 /// }
