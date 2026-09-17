@@ -16,6 +16,7 @@
  * limitations under the License.
  */
 
+use crossflow::bevy_ecs;
 use std::future::Future;
 use std::pin::Pin;
 
@@ -141,7 +142,97 @@ pub use __proto_settings as settings;
 
 // -----------------------------------------------------------------
 
+/// [`publish`][ProtoHandle::publish], [`subscribe`][ProtoHandle::subscribe], [`recv`][ProtoStream::recv] output.
 pub type ProtoFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
+
+// bevy_ecs::prelude::Resource: Send + Sync + 'static
+// Clone: for Res<bevy_ecs::prelude::Resource>::clone
+/// Handles protocol connection, providing pub/sub/connect.
+/// Surround original struct with [`handle!`] prior to `impl`.
+#[allow(clippy::type_complexity)]
+pub trait ProtoHandle: bevy_ecs::prelude::Resource + Clone {
+    type Settings: ProtoSettings;
+    type NodeConfig;
+    type Input;
+    type Output;
+
+    fn connect(settings: Self::Settings, runtime: tokio::runtime::Handle) -> Self
+    where
+        Self: Sized;
+
+    fn publish(
+        &self,
+        address: &str,
+        payload: Self::Input,     // &[u8]
+        config: Self::NodeConfig, // &serde_json::Value
+    ) -> ProtoFuture<'_, Result<(), ProtoError>>;
+
+    fn subscribe(
+        &self,
+        address: &str,
+        config: Self::NodeConfig, // &serde_json::Value
+    ) -> ProtoFuture<'_, Result<Box<dyn ProtoStream<Output = Self::Output>>, ProtoError>>;
+}
+
+/// Prerequisites for [`ProtoHandle`].
+///
+/// # Example
+///
+/// ```
+/// # #[macro_use] extern crate rmf2_task_orchestrator;
+/// # use rmf2_task_orchestrator::client::protocol;
+/// protocol::handle! {
+///     pub struct MQTTHandle {
+///         client: Arc<AsyncClient>,
+///         subscriptions: Arc<DashMap<String, broadcast::Sender<MqttMessage>>>,
+///     }
+/// }
+/// impl MQTTHandle {
+///     fn parse_qos(qos: u8) -> Result<rumqttc::QoS, protocol::ProtoError> {
+///         Ok(match qos {
+///             0 => rumqttc::QoS::AtMostOnce,
+///             _ => return Err(protocol::ProtoError::Config(qos)),
+///         })
+///     }
+/// }
+/// impl protocol::ProtoHandle for MQTTHandle {
+///     type Settings = MQTTSettings;
+///     type NodeConfig = Vec<u8>;
+///     type Input = Vec<u8>;
+///     type Output = Vec<u8>;
+///
+///     fn connect(config: Self::Settings) -> Self {
+///         ...
+///     }
+///
+///     fn subscribe(&self, topic: &str, qos: u8) -> ProtoFuture<'_, ()> {
+///         ...
+///     }
+///
+///     fn publish(&self, topic: &str, qos: u8, payload: Self::Input) -> ProtoFuture<'_, Box<dyn ProtoStream<IoType = Self::Output>>> {
+///         ...
+///     }
+/// }
+/// ```
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __proto_handle {
+    (
+        $(#[$m:meta])*
+        $v:vis struct $n:ident { $($f:ident : $t:ty),* $(,)? }
+    ) => {
+        $(#[$m])*
+        #[derive(Clone)]
+        $v struct $n { $(pub $f: $t),* }
+
+        // Implement Resource trait manually to prevent versioning issues
+        // Simple `#[derive(Resource)]` uses downstream version
+        impl $crate::__bevy_ecs::prelude::Resource for $n {}
+    };
+}
+
+#[doc(inline)]
+pub use __proto_handle as handle;
 
 // -----------------------------------------------------------------
 
