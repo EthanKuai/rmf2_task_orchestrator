@@ -159,9 +159,10 @@ pub trait ProtoHandle: bevy_ecs::prelude::Resource + Clone {
     type In;
     type Out;
 
-    fn connect(settings: Self::Settings, runtime: tokio::runtime::Handle) -> Self
-    where
-        Self: Sized;
+    fn connect(
+        settings: Self::Settings,
+        runtime: tokio::runtime::Handle,
+    ) -> Result<Self, ProtoError>;
 
     fn publish(
         &self,
@@ -250,7 +251,7 @@ pub trait ProtoHandle: bevy_ecs::prelude::Resource + Clone {
 ///     type In = MqttIn;
 ///     type Out = MqttOut;
 ///
-///     fn connect(settings: MQTTSettings, runtime: Handle) -> Self {
+///     fn connect(settings: MQTTSettings, runtime: Handle) -> Result<Self, ProtoError> {
 ///         // ...
 ///         # let MQTTSettings {
 ///         #     client_id,
@@ -260,10 +261,10 @@ pub trait ProtoHandle: bevy_ecs::prelude::Resource + Clone {
 ///         # let mut mqttoptions = MqttOptions::new(client_id, host, port);
 ///         # let (client, mut _eventloop) = AsyncClient::new(mqttoptions, 64);
 ///         # let subscriptions: Arc<DashMap<String, broadcast::Sender<MqttOut>>> = Arc::new(DashMap::new());
-///         # Self {
+///         # Ok(Self {
 ///         #     client: Arc::new(client),
 ///         #     subscriptions,
-///         # }
+///         # })
 ///     }
 ///
 ///     fn publish(
@@ -384,7 +385,8 @@ impl<Handle: ProtoHandle> bevy_ecs::system::Command for EnsureProto<Handle> {
     fn apply(self, world: &mut bevy_ecs::prelude::World) {
         if let Some(config) = (self.0).lock().unwrap().take() {
             let runtime = world.resource::<crate::TokioHandle>().0.clone();
-            let instance = Handle::connect(config, runtime);
+            let instance = Handle::connect(config, runtime)
+                .unwrap_or_else(|e| panic!("Failed to connect {}: {e}", get_type::<Handle>()));
             world.insert_resource(instance);
         }
     }
