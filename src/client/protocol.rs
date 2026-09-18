@@ -368,9 +368,14 @@ pub struct EnsureProto<Handle: ProtoHandle>(Arc<Mutex<Option<Handle::Settings>>>
 
 impl<Handle: ProtoHandle> EnsureProto<Handle> {
     pub fn new(settings: Option<Handle::Settings>) -> Self {
-        Self(Arc::new(Mutex::new(Some(settings.unwrap_or_else(|| {
-            Handle::Settings::load_config().unwrap()
-        })))))
+        let settings =
+            settings.unwrap_or_else(|| Handle::Settings::load_config().unwrap());
+        assert!(
+            settings.is_valid(),
+            "Invalid {} configuration",
+            get_type::<Handle::Settings>()
+        );
+        Self(Arc::new(Mutex::new(Some(settings))))
     }
 }
 
