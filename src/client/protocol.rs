@@ -19,6 +19,7 @@
 use crossflow::bevy_ecs;
 use std::future::Future;
 use std::pin::Pin;
+use std::sync::{Arc, Mutex};
 
 #[derive(Debug, thiserror::Error)]
 pub enum ProtoError {
@@ -357,4 +358,34 @@ pub use __proto_handle as handle;
 pub trait ProtoStream: Send + 'static {
     type Out;
     fn recv(&mut self) -> PinBoxFuture<'_, Option<Self::Out>>;
+}
+
+// -----------------------------------------------------------------
+
+/// Wrapper to initialise [`ProtoHandle`] from the given [`ProtoSettings`].
+pub struct EnsureProto<Handle: ProtoHandle>(Arc<Mutex<Option<Handle::Settings>>>);
+
+impl<Handle: ProtoHandle> EnsureProto<Handle> {
+    pub fn new(settings: Option<Handle::Settings>) -> Self {
+        Self(Arc::new(Mutex::new(Some(settings.unwrap_or_else(|| {
+            Handle::Settings::load_config().unwrap()
+        })))))
+    }
+}
+
+// Manually implementing #[derive(Clone)]
+impl<Handle: ProtoHandle> Clone for EnsureProto<Handle> {
+    fn clone(&self) -> Self {
+        Self(Arc::clone(&self.0))
+    }
+}
+
+impl<Handle: ProtoHandle> bevy_ecs::system::Command for EnsureProto<Handle> {
+    fn apply(self, world: &mut bevy_ecs::prelude::World) {
+        if let Some(config) = (self.0).lock().unwrap().take() {
+            let runtime = world.resource::<crate::TokioHandle>().0.clone();
+            let instance = Handle::connect(config, runtime);
+            world.insert_resource(instance);
+        }
+    }
 }
