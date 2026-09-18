@@ -46,16 +46,7 @@ pub trait ProtoSettings: serde::de::DeserializeOwned + Default + Send {
 
     fn load_config() -> Result<Self, ProtoError> {
         match crate::config::load_configuration_section::<Self>(Self::TOML_NAME) {
-            Ok(settings) => {
-                if !settings.is_valid() {
-                    return Err(ProtoError::Config(format!(
-                        "Invalid [{}] configuration: {}",
-                        Self::TOML_NAME,
-                        get_type::<Self>()
-                    )));
-                }
-                Ok(settings)
-            }
+            Ok(settings) => Ok(settings),
             Err(::config::ConfigError::NotFound(_)) => {
                 tracing::warn!(
                     "No [{}] table in configuration, using defaults for {}",
@@ -349,9 +340,13 @@ pub struct EnsureProto<Handle: ProtoHandle>(Arc<Mutex<Option<Handle::Settings>>>
 
 impl<Handle: ProtoHandle> EnsureProto<Handle> {
     pub fn new(settings: Option<Handle::Settings>) -> Self {
-        Self(Arc::new(Mutex::new(Some(settings.unwrap_or_else(|| {
-            Handle::Settings::load_config().unwrap()
-        })))))
+        let settings = settings.unwrap_or_else(|| Handle::Settings::load_config().unwrap());
+        assert!(
+            settings.is_valid(),
+            "Invalid {} configuration",
+            get_type::<Handle::Settings>()
+        );
+        Self(Arc::new(Mutex::new(Some(settings))))
     }
 }
 
