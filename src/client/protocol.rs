@@ -140,10 +140,40 @@ pub use __proto_settings as settings;
 // Clone: for Res<bevy_ecs::prelude::Resource>::clone
 /// Handles protocol connection, providing pub/sub/connect.
 /// Surround original struct with [`handle!`] prior to `impl`.
+///
+/// # Example
+///
+/// ```ignore
+/// impl ProtoHandle for XXXHandle {
+///     type Settings = XXXSettings;
+///     type NodeConfig = serde_json::Value;
+///     type In = [u8];
+///     type Stream = XXXStream;
+///     // reference Out: XXXStream::Out
+///
+///     fn connect(
+///         settings: Self::Settings,
+///         runtime: tokio::runtime::Handle,
+///     ) -> Result<Self, ProtoError> {...}
+///
+///     async fn publish(
+///         &self,
+///         address: &str,
+///         payload: Self::In,
+///         config: Self::NodeConfig,
+///     ) -> Result<(), ProtoError> {...}
+///
+///     async fn subscribe(
+///         &self,
+///         address: &str,
+///         config: Self::NodeConfig,
+///     ) -> Result<Self::Stream, ProtoError> {...}
+/// }
+/// ```
 pub trait ProtoHandle: bevy_ecs::prelude::Resource + Clone {
     type Settings: ProtoSettings;
-    type NodeConfig;
-    type In;
+    type NodeConfig; // serde_json::Value
+    type In; // [u8]
     type Stream: ProtoStream;
 
     fn connect(
@@ -154,14 +184,14 @@ pub trait ProtoHandle: bevy_ecs::prelude::Resource + Clone {
     fn publish(
         &self,
         address: &str,
-        payload: Self::In,        // &[u8]
-        config: Self::NodeConfig, // &serde_json::Value
+        payload: Self::In,
+        config: Self::NodeConfig,
     ) -> impl Future<Output = Result<(), ProtoError>> + Send;
 
     fn subscribe(
         &self,
         address: &str,
-        config: Self::NodeConfig, // &serde_json::Value
+        config: Self::NodeConfig,
     ) -> impl Future<Output = Result<Self::Stream, ProtoError>> + Send;
 }
 
@@ -315,6 +345,7 @@ pub use __proto_handle as handle;
 /// [`type Out`][ProtoStream::Out]: recommend [`Vec<u8>`] or [`serde_json::Value`]. Any other should be a custom type.
 ///
 /// # Example
+///
 /// ```
 /// # #[macro_use] extern crate rmf2_task_orchestrator;
 /// # use rmf2_task_orchestrator::client::protocol::*;
