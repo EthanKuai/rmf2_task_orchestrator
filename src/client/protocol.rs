@@ -18,7 +18,6 @@
 
 use crossflow::bevy_ecs;
 use std::future::Future;
-use std::pin::Pin;
 use std::sync::{Arc, Mutex};
 
 #[derive(Debug, thiserror::Error)]
@@ -141,14 +140,6 @@ pub use __proto_settings as settings;
 
 // -----------------------------------------------------------------
 
-/// [`recv`][ProtoStream::recv] output.
-pub type PinBoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
-
-/// [`PinBoxFuture`] wrapper. [`publish`][ProtoHandle::publish] & [`subscribe`][ProtoHandle::subscribe] output.
-pub type ProtoFuture<'a, T> = PinBoxFuture<'a, Result<T, ProtoError>>;
-
-// -----------------------------------------------------------------
-
 // bevy_ecs::prelude::Resource: Send + Sync + 'static
 // Clone: for Res<bevy_ecs::prelude::Resource>::clone
 /// Handles protocol connection, providing pub/sub/connect.
@@ -157,7 +148,7 @@ pub trait ProtoHandle: bevy_ecs::prelude::Resource + Clone {
     type Settings: ProtoSettings;
     type NodeConfig;
     type In;
-    type Out;
+    type Stream: ProtoStream;
 
     fn connect(
         settings: Self::Settings,
@@ -169,13 +160,13 @@ pub trait ProtoHandle: bevy_ecs::prelude::Resource + Clone {
         address: &str,
         payload: Self::In,        // &[u8]
         config: Self::NodeConfig, // &serde_json::Value
-    ) -> ProtoFuture<'_, ()>;
+    ) -> impl Future<Output = Result<(), ProtoError>> + Send;
 
     fn subscribe(
         &self,
         address: &str,
         config: Self::NodeConfig, // &serde_json::Value
-    ) -> ProtoFuture<'_, Box<dyn ProtoStream<Out = Self::Out>>>;
+    ) -> impl Future<Output = Result<Self::Stream, ProtoError>> + Send;
 }
 
 /// Prerequisites for [`ProtoHandle`].
@@ -219,16 +210,14 @@ pub trait ProtoHandle: bevy_ecs::prelude::Resource + Clone {
 /// # pub struct MQTTStream(broadcast::Receiver<MqttOut>);
 /// # impl ProtoStream for MQTTStream {
 /// #     type Out = MqttOut;
-/// #     fn recv(&mut self) -> PinBoxFuture<'_, Option<Self::Out>> {
-/// #         Box::pin(async move {
-/// #             loop {
-/// #                 match self.0.recv().await {
-/// #                     Ok(v) => return Some(v),
-/// #                     Err(RecvError::Lagged(n)) => tracing::warn!("MqttListen: lagged {n}"),
-/// #                     Err(RecvError::Closed) => return None,
-/// #                 }
+/// #     async fn recv(&mut self) -> Option<Self::Out> {
+/// #         loop {
+/// #             match self.0.recv().await {
+/// #                 Ok(v) => return Some(v),
+/// #                 Err(RecvError::Lagged(n)) => tracing::warn!("MqttListen: lagged {n}"),
+/// #                 Err(RecvError::Closed) => return None,
 /// #             }
-/// #         })
+/// #         }
 /// #     }
 /// # }
 /// handle! {
@@ -249,7 +238,7 @@ pub trait ProtoHandle: bevy_ecs::prelude::Resource + Clone {
 ///     type Settings = MQTTSettings;
 ///     type NodeConfig = u8;
 ///     type In = MqttIn;
-///     type Out = MqttOut;
+///     type Stream = MQTTStream;
 ///
 ///     fn connect(settings: MQTTSettings, runtime: Handle) -> Result<Self, ProtoError> {
 ///         // ...
@@ -267,44 +256,38 @@ pub trait ProtoHandle: bevy_ecs::prelude::Resource + Clone {
 ///         # })
 ///     }
 ///
-///     fn publish(
+///     async fn publish(
 ///         &self,
 ///         topic: &str,
 ///         payload: MqttIn,
 ///         qos: Self::NodeConfig,
-///     ) -> ProtoFuture<'_, ()> {
+///     ) -> Result<(), ProtoError> {
 ///         // ...
-///         # let topic = topic.to_string();
-///         # Box::pin(async move {
-///         #     self.client
-///         #         .publish(&topic, Self::parse_qos(qos)?, payload.retain, payload.payload)
-///         #         .await
-///         #         .map_err(|e| ProtoError::Publish(format!("Failed to publish to {topic} topic: {e}")))?;
-///         #     Ok(())
-///         # })
+///         # self.client
+///         #     .publish(topic, Self::parse_qos(qos)?, payload.retain, payload.payload)
+///         #     .await
+///         #     .map_err(|e| ProtoError::Publish(format!("Failed to publish to {topic} topic: {e}")))?;
+///         # Ok(())
 ///     }
 ///
-///     fn subscribe(
+///     async fn subscribe(
 ///         &self,
 ///         topic: &str,
 ///         qos: Self::NodeConfig,
-///     ) -> ProtoFuture<'_, Box<dyn ProtoStream<Out = MqttOut>>> {
+///     ) -> Result<Self::Stream, ProtoError> {
 ///         // ...
-///         # let topic = topic.to_string();
-///         # Box::pin(async move {
-///         #     if let Some(tx) = self.subscriptions.get(&topic) {
-///         #         return Ok(Box::new(MQTTStream(tx.subscribe())) as Box<dyn ProtoStream<Out = MqttOut>>);
-///         #     }
-///         #     let (tx, rx) = broadcast::channel(16);
-///         #     self.client
-///         #         .subscribe(&topic, Self::parse_qos(qos)?)
-///         #         .await
-///         #         .map_err(|e| {
-///         #             ProtoError::Subscribe(format!("Failed to subscribe to {topic} topic: {e}"))
-///         #         })?;
-///         #     self.subscriptions.insert(topic, tx);
-///         #     Ok(Box::new(MQTTStream(rx)) as Box<dyn ProtoStream<Out = MqttOut>>)
-///         # })
+///         # if let Some(tx) = self.subscriptions.get(topic) {
+///         #     return Ok(MQTTStream(tx.subscribe()));
+///         # }
+///         # let (tx, rx) = broadcast::channel(16);
+///         # self.client
+///         #     .subscribe(topic, Self::parse_qos(qos)?)
+///         #     .await
+///         #     .map_err(|e| {
+///         #         ProtoError::Subscribe(format!("Failed to subscribe to {topic} topic: {e}"))
+///         #     })?;
+///         # self.subscriptions.insert(topic.to_string(), tx);
+///         # Ok(MQTTStream(rx))
 ///     }
 /// }
 /// ```
@@ -343,22 +326,20 @@ pub use __proto_handle as handle;
 /// pub struct MQTTStream(broadcast::Receiver<MqttOut>);
 /// impl ProtoStream for MQTTStream {
 ///     type Out = MqttOut;
-///     fn recv(&mut self) -> PinBoxFuture<'_, Option<Self::Out>> {
-///         Box::pin(async move {
-///             loop {
-///                 match self.0.recv().await {
-///                     Ok(v) => return Some(v),
-///                     Err(RecvError::Lagged(n)) => tracing::warn!("Mqtt: lagged {n}"),
-///                     Err(RecvError::Closed) => return None,
-///                 }
+///     async fn recv(&mut self) -> Option<Self::Out> {
+///         loop {
+///             match self.0.recv().await {
+///                 Ok(v) => return Some(v),
+///                 Err(RecvError::Lagged(n)) => tracing::warn!("Mqtt: lagged {n}"),
+///                 Err(RecvError::Closed) => return None,
 ///             }
-///         })
+///         }
 ///     }
 /// }
 /// ```
 pub trait ProtoStream: Send + 'static {
     type Out;
-    fn recv(&mut self) -> PinBoxFuture<'_, Option<Self::Out>>;
+    fn recv(&mut self) -> impl Future<Output = Option<Self::Out>> + Send;
 }
 
 // -----------------------------------------------------------------
