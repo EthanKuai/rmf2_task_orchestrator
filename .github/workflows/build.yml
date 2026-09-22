@@ -51,5 +51,9 @@ jobs:
           mosquitto -d
           timeout 5 bash -c 'until echo > /dev/tcp/127.0.0.1/1883; do sleep 0.5; done'
 
+      # Future-proof: check features + multiple crates
       - name: test
-        run: cargo test --locked
+        run: cargo test --workspace --locked --all-targets --all-features
+
+      - name: test (no-default-features)
+        run: cargo test --workspace --locked --no-default-features
