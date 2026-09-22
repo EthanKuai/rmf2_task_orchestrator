@@ -65,7 +65,7 @@ pub trait ProtoSettings: serde::de::DeserializeOwned + Default + Send {
     fn validate(&self) -> Result<(), ProtoError>;
 }
 
-/// Constructs [`ProtoSettings`].
+/// Constructs [`ProtoSettings`]. Do NOT write visibility modifiers within fields, they will be forced to be `pub`.
 ///
 /// # Example
 ///
@@ -295,11 +295,11 @@ pub trait ProtoHandle: bevy_ecs::prelude::Resource + Clone {
 macro_rules! __proto_handle {
     (
         $(#[$m:meta])*
-        $v:vis struct $n:ident { $($f:ident : $t:ty),* $(,)? }
+        $v:vis struct $n:ident { $($fv:vis $f:ident : $t:ty),* $(,)? }
     ) => {
         $(#[$m])*
         #[derive(Clone)]
-        $v struct $n { $(pub $f: $t),* }
+        $v struct $n { $($fv $f: $t),* }
 
         // Implement Resource trait manually to prevent versioning issues
         // Simple `#[derive(Resource)]` uses downstream version
