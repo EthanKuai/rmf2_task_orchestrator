@@ -16,18 +16,29 @@
  * limitations under the License.
  */
 
+//! Generalise protocol clients to reduce boilerplate on implementations. Provides the tools for downstream users to implement custom protocol clients.
+//! See: [`settings!`], [`handle!`], [`ProtoStream`]
+#![warn(missing_docs)]
+
 use crossflow::bevy_ecs;
 use std::future::Future;
 use std::sync::{Arc, Mutex};
 
 #[derive(Debug, thiserror::Error)]
+/// Result error type in rmf2_to protocols.
+///
+/// All error types accept a [`String`].
 pub enum ProtoError {
+    /// Error within [`ProtoSettings`]'s fields.
     #[error("Configuration error: {0}")]
     Config(String),
+    /// Error connecting with [`ProtoHandle`] or [`ProtoStream`] with config from [`ProtoSettings`].
     #[error("Connection error: {0}")]
     Connect(String),
+    /// Error subscribing with [`ProtoHandle`] or [`ProtoStream`].
     #[error("Publishing error: {0}")]
     Publish(String),
+    /// Error publishing with [`ProtoHandle`].
     #[error("Subscribing error: {0}")]
     Subscribe(String),
 }
@@ -40,10 +51,12 @@ fn get_type<T: ?Sized>() -> &'static str {
 
 // Send: Arc<Mutex<_>>
 // DeserializeOwned + Default: load_base_configuration
-/// Handle loading of protocol configuration.
+/// Handle loading of protocol configuration. Constructed via [`settings!`].
 pub trait ProtoSettings: serde::de::DeserializeOwned + Default + Send {
+    /// The `[table]` name in `config.toml` this settings struct deserialises from.
     const TOML_NAME: &'static str;
 
+    /// Deserialises `[TOML_NAME]` table from `config.toml`. Missing fields fallback to defaults.
     fn load_config() -> Result<Self, ProtoError> {
         match crate::config::load_configuration_section::<Self>(Self::TOML_NAME) {
             Ok(settings) => Ok(settings),
@@ -62,6 +75,8 @@ pub trait ProtoSettings: serde::de::DeserializeOwned + Default + Send {
             ))),
         }
     }
+
+    /// Ensure all required fields are present and valid, otherwise raise [`ProtoError`][ProtoError::Config].
     fn validate(&self) -> Result<(), ProtoError>;
 }
 
@@ -171,16 +186,25 @@ pub use __proto_settings as settings;
 /// }
 /// ```
 pub trait ProtoHandle: bevy_ecs::prelude::Resource + Clone {
+    /// Linked [`Settings`][ProtoSettings] implementation for this protocol.
     type Settings: ProtoSettings;
+
+    /// Config per node
     type NodeConfig; // serde_json::Value
+
+    /// Payload type to be [`published`][ProtoHandle::publish].
     type In; // [u8]
+
+    /// Linked [`ProtoStream`] implementation for this protocol.
     type Stream: ProtoStream;
 
+    /// Synchronously connects to protocol's server, returning client handle.
     fn connect(
         settings: Self::Settings,
         runtime: tokio::runtime::Handle,
     ) -> Result<Self, ProtoError>;
 
+    /// Asynchronously publishes a message.
     fn publish(
         &self,
         address: &str,
@@ -188,6 +212,7 @@ pub trait ProtoHandle: bevy_ecs::prelude::Resource + Clone {
         config: Self::NodeConfig,
     ) -> impl Future<Output = Result<(), ProtoError>> + Send;
 
+    /// Asynchronously subscribes to a topic/address.
     fn subscribe(
         &self,
         address: &str,
@@ -342,6 +367,7 @@ pub use __proto_handle as handle;
 
 // -----------------------------------------------------------------
 
+/// Wrapper around a protocol output stream.
 /// [`type Out`][ProtoStream::Out]: recommend [`Vec<u8>`] or [`serde_json::Value`]. Any other should be a custom type.
 ///
 /// # Example
@@ -368,7 +394,10 @@ pub use __proto_handle as handle;
 /// }
 /// ```
 pub trait ProtoStream: Send + 'static {
+    /// Output message type.
     type Out;
+
+    /// Asynchronously receives a message.
     fn recv(&mut self) -> impl Future<Output = Option<Self::Out>> + Send;
 }
 
@@ -378,6 +407,9 @@ pub trait ProtoStream: Send + 'static {
 pub struct EnsureProto<Handle: ProtoHandle>(Arc<Mutex<Option<Handle::Settings>>>);
 
 impl<Handle: ProtoHandle> EnsureProto<Handle> {
+    /// New instance given [`Option<settings>`][ProtoSettings].
+    ///
+    /// If `None` is given, [`load_config`][ProtoSettings::load_config] is used instead.
     pub fn new(settings: Option<Handle::Settings>) -> Self {
         Self::try_new(settings).unwrap_or_else(|e| panic!("{e}"))
     }
@@ -399,6 +431,7 @@ impl<Handle: ProtoHandle> Clone for EnsureProto<Handle> {
     }
 }
 
+/// Oneshot lazy initialising of [`ProtoHandle`]
 impl<Handle: ProtoHandle> bevy_ecs::system::Command for EnsureProto<Handle> {
     fn apply(self, world: &mut bevy_ecs::prelude::World) {
         if let Some(config) = (self.0).lock().unwrap().take() {
