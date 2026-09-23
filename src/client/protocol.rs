@@ -144,6 +144,42 @@ macro_rules! __proto_settings {
             }
         }
     };
+    // CATCH: Throw error when struct field visibility is specified
+    (
+        $(#[$m:meta])*
+        $v:vis struct $name:ident in $table:literal {
+            $($(#[$fm:meta])* $fv:vis $f:ident : $t:ty = $d:expr),* $(,)?
+        }
+        validate | $s:ident | $body:block
+    ) => {
+        ::core::compile_error!(::core::concat!(
+            "`settings!` struct fields are always `pub`. \
+             Remove all visibility qualifiers inside `struct ",
+            ::core::stringify!($name),
+            "`"
+        ));
+
+        // Second diagnostic, pointed at each offending token: `$fv` carries the
+        // caller's span, and a visibility on a trait item is E0449. `const _` plus
+        // block scoping lets this repeat per field without name collisions.
+        $( const _: () = { trait __ProtoFieldVis { $fv fn $f(); } }; )*
+    };
+    // CATCH: Throw error when TOML_NAME is not specified
+    (
+        $(#[$m:meta])*
+        $v:vis struct $name:ident {
+            $($(#[$fm:meta])* $fv:vis $f:ident : $t:ty = $d:expr),* $(,)?
+        }
+        validate | $s:ident | $body:block
+    ) => {
+        ::core::compile_error!(::core::concat!(
+            "`settings!` missing field `TOML_NAME`. Suggestion: `",
+            ::core::stringify!($v),
+            " struct ",
+            ::core::stringify!($name),
+            " in \"table_name_in_config.toml\"`"
+        ));
+    };
 }
 
 #[doc(inline)]
