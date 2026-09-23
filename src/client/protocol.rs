@@ -62,7 +62,7 @@ pub trait ProtoSettings: serde::de::DeserializeOwned + Default + Send {
             ))),
         }
     }
-    fn is_valid(&self) -> bool;
+    fn validate(&self) -> Result<(), ProtoError>;
 }
 
 /// Constructs [`ProtoSettings`].
@@ -78,11 +78,16 @@ pub trait ProtoSettings: serde::de::DeserializeOwned + Default + Send {
 ///         port: u16 = 1883,
 ///         client_id: String = "p1".into(),
 ///     }
-///     is_valid |s| {
-///         if s.client_id.is_empty() || s.host.is_empty() {
-///             return false;
+///     // Input: &self
+///     // Output: Result<(), ProtoError>
+///     validate |s| {
+///         if s.client_id.is_empty() {
+///             return Err(ProtoError::Config("client_id is required".into()));
 ///         }
-///         true
+///         if s.host.is_empty() {
+///             return Err(ProtoError::Config("host is required".into()));
+///         }
+///         Ok(())
 ///     }
 /// }
 /// ```
@@ -94,7 +99,7 @@ macro_rules! __proto_settings {
         $v:vis struct $name:ident in $table:literal {
             $($(#[$fm:meta])* $f:ident : $t:ty = $d:expr),* $(,)?
         }
-        is_valid | $s:ident | $body:block
+        validate | $s:ident | $body:block
     ) => {
         $crate::__paste::paste! {
             #[doc(hidden)]
@@ -118,7 +123,7 @@ macro_rules! __proto_settings {
         impl $crate::client::protocol::ProtoSettings for $name {
             const TOML_NAME: &'static str = $table;
 
-            fn is_valid(&self) -> bool {
+            fn validate(&self) -> Result<(), $crate::client::protocol::ProtoError> {
                 let $s = self;
                 $body
             }
@@ -191,11 +196,14 @@ pub trait ProtoHandle: bevy_ecs::prelude::Resource + Clone {
 /// #         port: u16 = 1883,
 /// #         client_id: String = "p1".into(),
 /// #     }
-/// #     is_valid |s| {
-/// #         if s.client_id.is_empty() || s.host.is_empty() {
-/// #             return false;
+/// #     validate |s| {
+/// #         if s.client_id.is_empty() {
+/// #             return Err(ProtoError::Config("client_id is required".into()));
 /// #         }
-/// #         true
+/// #         if s.host.is_empty() {
+/// #             return Err(ProtoError::Config("host is required".into()));
+/// #         }
+/// #         Ok(())
 /// #     }
 /// # }
 /// # pub struct MQTTStream(broadcast::Receiver<MqttOut>);
@@ -340,13 +348,16 @@ pub struct EnsureProto<Handle: ProtoHandle>(Arc<Mutex<Option<Handle::Settings>>>
 
 impl<Handle: ProtoHandle> EnsureProto<Handle> {
     pub fn new(settings: Option<Handle::Settings>) -> Self {
-        let settings = settings.unwrap_or_else(|| Handle::Settings::load_config().unwrap());
-        assert!(
-            settings.is_valid(),
-            "Invalid {} configuration",
-            get_type::<Handle::Settings>()
-        );
-        Self(Arc::new(Mutex::new(Some(settings))))
+        Self::try_new(settings).unwrap_or_else(|e| panic!("{e}"))
+    }
+    // Preserves error to display full traceback
+    fn try_new(settings: Option<Handle::Settings>) -> Result<Self, ProtoError> {
+        let settings = match settings {
+            Some(s) => s,
+            None => Handle::Settings::load_config()?,
+        };
+        settings.validate()?;
+        Ok(Self(Arc::new(Mutex::new(Some(settings)))))
     }
 }
 
